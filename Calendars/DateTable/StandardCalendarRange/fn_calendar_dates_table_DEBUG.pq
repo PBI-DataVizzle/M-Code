@@ -26,50 +26,140 @@ let
         v_add_today = if List.Contains(v_Source, v_current_date) then v_Source else List.Combine({v_Source, {v_current_date}}),
         v_to_table = Table.FromColumns({v_add_today}, type table [date_id = date]),
     v_date_serial = Table.AddColumn(v_to_table, "date_serial_number", each Duration.Days([date_id] - #date(1900, 1, 1)), Int64.Type),
-
-        /*  === Year Columns === */
-        v_rec_years = Table.AddColumn(v_date_serial, "rec_year", each [
-            calendar_year = Date.Year([date_id]),
-            current_year = Date.Year(v_current_date),
-            calendar_year_offset = calendar_year - current_year,
-            is_year_complete = if Date.EndOfYear([date_id]) < Date.EndOfYear(v_current_date) then 1 else 0,
-            is_cmtd = if ([date_id] <= Date.AddDays(Date.StartOfMonth(Date.From(v_current_date)), -1)) then 1 else 0,
-            is_ytd = if ([date_id] <= Date.From(v_current_date)) then 1 else 0,
-            is_frc = if ([date_id] > Date.From(v_current_date)) then 1 else 0
-        ], type [calendar_year=Int64.Type, calendar_year_offset=Int64.Type, is_year_complete=Int64.Type, is_cmtd=Int64.Type, is_ytd=Int64.Type, is_frc=Int64.Type]),
-        v_exp_rec_years = Table.ExpandRecordColumn(v_rec_years, "rec_year", {"calendar_year", "calendar_year_offset", "is_year_complete", "is_cmtd", "is_ytd", "is_frc"}),
+    /*  === Year Columns === */
+        v_rec_years = Table.AddColumn(
+  v_date_serial, 
+  "rec_year", 
+  each [
+    calendar_year        = Date.Year([date_id]), 
+    current_year         = Date.Year(v_current_date), 
+    calendar_year_offset = calendar_year - current_year, 
+    is_year_complete     = if Date.EndOfYear([date_id]) < Date.EndOfYear(v_current_date) then 1 else 0, 
+    is_cmtd              = if ([date_id] <= Date.AddDays(Date.StartOfMonth(Date.From(v_current_date)), - 1)) then 1 else 0, 
+    is_ytd               = if ([date_id] <= Date.From(v_current_date)) then 1 else 0, 
+    is_frc               = if ([date_id] > Date.From(v_current_date)) then 1 else 0, 
+    is_py                = if calendar_year_offset = - 1 then 1 else 0
+  ], 
+  type [
+    calendar_year = Int64.Type, 
+    calendar_year_offset = Int64.Type, 
+    is_year_complete = Int64.Type, 
+    is_cmtd = Int64.Type, 
+    is_ytd = Int64.Type, 
+    is_frc = Int64.Type, 
+    is_py = Int64.Type
+  ]
+),
+        v_exp_rec_years = Table.ExpandRecordColumn(
+        v_rec_years, 
+        "rec_year", 
+        {
+          "calendar_year", 
+          "calendar_year_offset", 
+          "is_year_complete", 
+          "is_cmtd", 
+          "is_ytd", 
+          "is_frc", 
+          "is_py"
+        }
+      ),
     
     /*  === quarter Columns === */
-        v_rec_quarters = Table.AddColumn(v_exp_rec_years, "QuarterRecord", each [
-            quarter_num = Date.QuarterOfYear([date_id]),
-            quarter = "Q" & Number.ToText(quarter_num),
-            quarter_start = Date.StartOfQuarter([date_id]),
-            quarter_end = Date.EndOfQuarter([date_id]),
-            quarter_year = "Q" & Number.ToText(quarter_num) & Date.ToText([date_id], [Format = " yy"]),
-            quarter_year_id = [calendar_year] * 100 + quarter_num,
-            quarter_offset = ((4 * Date.Year([date_id])) + quarter_num) - ((4 * Date.Year(v_current_date)) + Date.QuarterOfYear(v_current_date)),
-            is_quarter_complete = if quarter_end < Date.EndOfQuarter(v_current_date) then 1 else 0
-        ], type [quarter_num=Int64.Type, quarter=text, quarter_start=date, quarter_end=date, quarter_year=text, quarter_year_id=Int64.Type, quarter_offset=Int64.Type, is_quarter_complete=Int64.Type]),
-        v_exp_rec_quarters = Table.ExpandRecordColumn(v_rec_quarters, "QuarterRecord", 
-            {"quarter_num", "quarter", "quarter_start", "quarter_end", "quarter_year", "quarter_year_id", "quarter_offset", "is_quarter_complete"}),
+        v_rec_quarters = Table.AddColumn(
+  v_exp_rec_years, 
+  "QuarterRecord", 
+  each [
+    quarter_num      = Date.QuarterOfYear([date_id]), 
+    quarter          = "Q" & Number.ToText(quarter_num), 
+    quarter_start    = Date.StartOfQuarter([date_id]), 
+    quarter_end      = Date.EndOfQuarter([date_id]), 
+    quarter_year     = "Q" & Number.ToText(quarter_num) & Date.ToText([date_id], [Format = " yy"]), 
+    quarter_year_num  = [calendar_year] * 100 + quarter_num, 
+    quarter_offset   = ((4 * Date.Year([date_id])) + quarter_num)
+      - ((4 * Date.Year(v_current_date)) + Date.QuarterOfYear(v_current_date)), 
+    is_quarter_complete = if quarter_end < Date.EndOfQuarter(v_current_date) 
+    then 1 else 0
+  ], 
+  type [
+    quarter_num     = Int64.Type, 
+    quarter         = text, 
+    quarter_start   = date, 
+    quarter_end     = date, 
+    quarter_year    = text, 
+    quarter_year_num = Int64.Type, 
+    quarter_offset  = Int64.Type, 
+    is_quarter_complete = Int64.Type
+  ]
+),
+        v_exp_rec_quarters = Table.ExpandRecordColumn(
+  v_rec_quarters, 
+  "QuarterRecord", 
+  {
+    "quarter_num", 
+    "quarter", 
+    "quarter_start", 
+    "quarter_end", 
+    "quarter_year", 
+    "quarter_year_num", 
+    "quarter_offset", 
+    "is_quarter_complete"
+  }
+),
 
         /*  === Month Columns === */
-        v_rec_months = Table.AddColumn(v_exp_rec_quarters, "MonthRecord", each [
-            month_num = Date.Month([date_id]),
-            month_start = Date.StartOfMonth([date_id]),
-            month_end = Date.EndOfMonth([date_id]),
-            month_year = Text.Proper(Date.ToText([date_id], [Format = "MMM-yy"])),
-            month_year_id = [calendar_year] * 100 + month_num,
-            month_offset = ((12 * Date.Year([date_id])) + month_num) - ((12 * Date.Year(v_current_date)) + Date.Month(v_current_date)),
-            is_month_complete = if month_end < Date.EndOfMonth(v_current_date) then 1 else 0,
-            month_name = Text.Proper(Date.ToText([date_id], "MMMM")),
-            month_name_short = Text.Proper(Date.ToText([date_id], "MMM")),
-            month_initial = Text.Start(Text.Proper(Date.ToText([date_id], "MMMM")), 1) & Text.Repeat(Character.FromNumber(8203), month_num),
-            month_day = Date.Day([date_id]),
-            month_selection = if month_num = v_current_month_num then "Current Month" else month_name_short
-        ], type [month_num=Int64.Type, month_start=date, month_end=date, month_year=text, month_year_id=Int64.Type, month_offset=Int64.Type, is_month_complete=Int64.Type, month_name=text, month_name_short=text, month_selection=text, month_initial=text, month_day=Int64.Type]),
-        v_exp_rec_months = Table.ExpandRecordColumn(v_rec_months, "MonthRecord", 
-            {"month_num", "month_start", "month_end", "month_year", "month_year_id", "month_offset", "is_month_complete", "month_name", "month_name_short", "month_selection", "month_initial", "month_day"}),
+        v_rec_months = Table.AddColumn(
+  v_exp_rec_quarters, 
+  "MonthRecord", 
+  each [
+    month_num         = Date.Month([date_id]), 
+    month_start       = Date.StartOfMonth([date_id]), 
+    month_end         = Date.EndOfMonth([date_id]), 
+    month_year        = Text.Proper(Date.ToText([date_id], [Format = "MMM-yy"])),
+    month_year_serial_number = [calendar_year] * 12 + month_num - 1 ,
+    month_year_id     = [calendar_year] * 100 + month_num, 
+    month_offset      = ((12 * Date.Year([date_id])) + month_num) - ((12 * Date.Year(v_current_date)) + Date.Month(v_current_date)), 
+    is_month_complete = if month_end < Date.EndOfMonth(v_current_date) then 1 else 0, 
+    month_name        = Text.Proper(Date.ToText([date_id], "MMMM")), 
+    month_name_short  = Text.Proper(Date.ToText([date_id], "MMM")), 
+    month_initial     = Text.Start(Text.Proper(Date.ToText([date_id], "MMMM")), 1) & Text.Repeat(Character.FromNumber(8203), month_num), 
+    month_day         = Date.Day([date_id]), 
+    month_selection   = if month_num = v_current_month_num then "Current Month" else month_name_short
+  ], 
+  type [
+    month_num         = Int64.Type, 
+    month_start       = date, 
+    month_end         = date, 
+    month_year        = text,
+    month_year_serial_number = Int64.Type, 
+    month_year_id     = Int64.Type, 
+    month_offset      = Int64.Type, 
+    is_month_complete = Int64.Type, 
+    month_name        = text, 
+    month_name_short  = text, 
+    month_selection   = text, 
+    month_initial     = text, 
+    month_day         = Int64.Type
+  ]
+),
+        v_exp_rec_months = Table.ExpandRecordColumn(
+  v_rec_months, 
+  "MonthRecord", 
+  {
+    "month_num", 
+    "month_start", 
+    "month_end", 
+    "month_year",
+    "month_year_serial_number", 
+    "month_year_id", 
+    "month_offset", 
+    "is_month_complete", 
+    "month_name", 
+    "month_name_short", 
+    "month_selection", 
+    "month_initial", 
+    "month_day"
+  }
+),
 
         /*  === Week Columns === */
         v_rec_weeks = Table.AddColumn(v_exp_rec_months, "WeekRecord", each [
@@ -80,12 +170,23 @@ let
             week_start = Date.StartOfWeek([date_id], v_week_start),
             week_end = Date.EndOfWeek([date_id], v_week_start),
             week_year = "W" & Text.PadStart(Text.From(week_num), 2, "0") & " " & Text.End(Text.From(Date.Year(Date.AddDays(week_start, 3))),2),
-            week_year_id = Date.Year(Date.AddDays(week_start, 3)) * 100 + week_num,
+            week_year_num = Date.Year(Date.AddDays(week_start, 3)) * 100 + week_num,
             week_offset = (Number.From(week_start) - Number.From(Date.StartOfWeek(v_current_date, v_week_start))) / 7,
             is_week_complete = if week_end < Date.EndOfWeek(v_current_date, v_week_start) then 1 else 0
-        ], type [week_num=Int64.Type, week_start=date, week_end=date, week_year=text, week_year_id=Int64.Type, week_offset=Int64.Type, is_week_complete=Int64.Type]),
-        v_exp_rec_weeks = Table.ExpandRecordColumn(v_rec_weeks, "WeekRecord", 
-            {"week_num", "week_start", "week_end", "week_year", "week_year_id", "week_offset", "is_week_complete"}),
+        ], type [week_num=Int64.Type, week_start=date, week_end=date, week_year=text, week_year_num=Int64.Type, week_offset=Int64.Type, is_week_complete=Int64.Type]),
+        v_exp_rec_weeks = Table.ExpandRecordColumn(
+  v_rec_weeks, 
+  "WeekRecord", 
+  {
+    "week_num", 
+    "week_start", 
+    "week_end", 
+    "week_year", 
+    "week_year_num", 
+    "week_offset", 
+    "is_week_complete"
+  }
+),
 
         /* === Day Columns === */
         v_rec_days = Table.AddColumn(v_exp_rec_weeks, "DayRecord", each [
@@ -103,19 +204,156 @@ let
                 else if (if Date.DayOfWeek([date_id], v_week_start) > 4 then false else true) = false then "Weekend" 
                 else if (if Date.DayOfWeek([date_id], v_week_start) > 4 then false else true) = true then "Weekday" else null
         ], type [week_day_num=Int64.Type, week_day_name=text, week_day_initial=text, day_year=Int64.Type, day_id=Int64.Type, day_offset=Int64.Type, is_future=number, is_week_day=number, is_holiday= (if v_holidays_provided then Logical.Type else Text.Type), is_work_day=number, date_type=text]),
-        v_exp_rec_days = Table.ExpandRecordColumn(v_rec_days, "DayRecord", 
-            {"week_day_num", "week_day_name", "week_day_initial", "day_year", "day_id", "day_offset", "is_future", "is_week_day", "is_holiday", "is_work_day", "date_type"}),
+        v_exp_rec_days = Table.ExpandRecordColumn(
+  v_rec_days, 
+  "DayRecord", 
+  {
+    "week_day_num", 
+    "week_day_name", 
+    "week_day_initial", 
+    "day_year", 
+    "day_id", 
+    "day_offset", 
+    "is_future", 
+    "is_week_day", 
+    "is_holiday", 
+    "is_work_day", 
+    "date_type"
+  }
+),
 
         /* === ISO Columns === */
-        v_rec_iso_fields = Table.AddColumn(v_exp_rec_days, "ISORecords", each [
-        iso_year = Date.Year(Date.AddDays(Date.StartOfWeek([date_id], v_week_start), 3)),
-        iso_quarter_num = if [week_num] > 39 then 4 else if [week_num] > 26 then 3 else if [week_num] > 13 then 2 else 1,
-        iso_quarter = "Q" & Number.ToText(iso_quarter_num),
-        iso_quarter_year = "Q" & Number.ToText(iso_quarter_num) & " " & Text.End(Number.ToText(iso_year),2),
-        iso_quarter_year_id = iso_year * 100 + iso_quarter_num
-        ], type [iso_year=number, iso_quarter_num=number, iso_quarter=text, iso_quarter_year=text, iso_quarter_year_id=number]
-        ),
-         v_exp_rec_iso_fields = Table.ExpandRecordColumn(v_rec_iso_fields, "ISORecords", {"iso_year", "iso_quarter_num", "iso_quarter", "iso_quarter_year", "iso_quarter_year_id"}),
+        v_rec_iso_fields = Table.AddColumn(
+    v_exp_rec_days,
+    "ISORecords",
+    each 
+        let
+            baseDate = [date_id],
+            today = DateTime.Date(DateTime.LocalNow()),
+
+            // === ISO Week & Quarter Info Function ===
+            getIsoWeekMeta = (d as date) as record =>
+                let
+                    dow = let x = Date.DayOfWeek(d, v_week_start) in if x = 0 then 7 else x,
+                    thursday = Date.AddDays(d, 4 - dow),
+                    iso_week_start_date = Date.AddDays(thursday, -3),
+                    iso_week_end_date = Date.AddDays(iso_week_start_date, 6),
+
+                    yearStart = #date(Date.Year(thursday), 1, 1),
+                    yearStartDow = let x = Date.DayOfWeek(yearStart, v_week_start) in if x = 0 then 7 else x,
+                    firstThursday = Date.AddDays(yearStart, 4 - yearStartDow),
+                    iso_year = Date.Year(thursday),
+                    iso_week_num = Number.IntegerDivide(Duration.Days(thursday - firstThursday), 7) + 1,
+                    week_index = iso_year * 53 + iso_week_num,
+
+                    iso_quarter_num =
+                        if iso_week_num > 39 then 4
+                        else if iso_week_num > 26 then 3
+                        else if iso_week_num > 13 then 2
+                        else 1,
+
+                    iso_quarter_start_date =
+                        #date(iso_year, ((iso_quarter_num - 1) * 3) + 1, 1),
+                    iso_quarter_end_date =
+                        Date.AddDays(
+                            Date.AddMonths(#date(iso_year, (iso_quarter_num - 1) * 3 + 1, 1), 3),
+                            -1
+                        )
+                in
+                    [
+                        iso_year = iso_year,
+                        iso_week_num = iso_week_num,
+                        week_index = week_index,
+                        iso_week_start_date = iso_week_start_date,
+                        iso_week_end_date = iso_week_end_date,
+                        iso_quarter_num = iso_quarter_num,
+                        iso_quarter_start_date = iso_quarter_start_date,
+                        iso_quarter_end_date = iso_quarter_end_date
+                    ],
+
+            baseMeta = getIsoWeekMeta(baseDate),
+            todayMeta = getIsoWeekMeta(today),
+
+            iso_year = baseMeta[iso_year],
+            iso_week_num = baseMeta[iso_week_num],
+            iso_year_week_num = iso_year * 100 + iso_week_num,
+            iso_week_offset = baseMeta[week_index] - todayMeta[week_index],
+
+            iso_quarter_num = baseMeta[iso_quarter_num],
+            iso_quarter = "Q" & Number.ToText(iso_quarter_num),
+            iso_quarter_year = "Q" & Number.ToText(iso_quarter_num) & " " & Text.End(Number.ToText(iso_year), 2),
+            iso_year_quarter_num = iso_year * 100 + iso_quarter_num,
+
+            iso_week_start_date = baseMeta[iso_week_start_date],
+            iso_week_end_date = baseMeta[iso_week_end_date],
+            iso_quarter_start_date = #date(iso_year, ((iso_quarter_num - 1) * 3) + 1, 1),
+            iso_quarter_end_date = Date.AddDays(Date.AddMonths(iso_quarter_start_date, 3), -1),
+
+
+            // === Current Period Flags (1 = yes, 0 = no) ===
+            is_current_iso_week =
+                if iso_year = todayMeta[iso_year] and iso_week_num = todayMeta[iso_week_num] then 1 else 0,
+            is_current_iso_month =
+                if Date.Year(baseDate) = Date.Year(today) and Date.Month(baseDate) = Date.Month(today) then 1 else 0,
+            is_current_iso_quarter =
+                if iso_year = todayMeta[iso_year] and iso_quarter_num = todayMeta[iso_quarter_num] then 1 else 0
+        in
+            [
+                iso_year = iso_year,
+                iso_week_num = iso_week_num,
+                iso_year_week_num = iso_year_week_num,
+                iso_week_offset = iso_week_offset,
+                iso_week_start_date = iso_week_start_date,
+                iso_week_end_date = iso_week_end_date,
+                iso_quarter_num = iso_quarter_num,
+                iso_quarter = iso_quarter,
+                iso_quarter_year = iso_quarter_year,
+                iso_year_quarter_num = iso_year_quarter_num,
+                iso_quarter_start_date = iso_quarter_start_date,
+                iso_quarter_end_date = iso_quarter_end_date,
+                is_current_iso_week = is_current_iso_week,
+                is_current_iso_month = is_current_iso_month,
+                is_current_iso_quarter = is_current_iso_quarter
+            ],
+    type [
+        iso_year=number,
+        iso_week_num=number,
+        iso_year_week_num=number,
+        iso_week_offset=number,
+        iso_week_start_date=date,
+        iso_week_end_date=date,
+        iso_quarter_num=number,
+        iso_quarter=text,
+        iso_quarter_year=text,
+        iso_year_quarter_num=number,
+        iso_quarter_start_date=date,
+        iso_quarter_end_date=date,
+        is_current_iso_week=number,
+        is_current_iso_month=number,
+        is_current_iso_quarter=number
+    ]
+),
+    v_exp_rec_iso_fields = Table.ExpandRecordColumn(
+  v_rec_iso_fields, 
+  "ISORecords", 
+  {
+    "iso_year", 
+    "iso_week_num", 
+    "iso_year_week_num", 
+    "iso_week_offset", 
+    "iso_week_start_date", 
+    "iso_week_end_date", 
+    "iso_quarter_num", 
+    "iso_quarter", 
+    "iso_quarter_year", 
+    "iso_year_quarter_num", 
+    "iso_quarter_start_date", 
+    "iso_quarter_end_date", 
+    "is_current_iso_week", 
+    "is_current_iso_month", 
+    "is_current_iso_quarter"
+  }
+),
        
         /* === Business Columns START === */
         v_rec_business_fields = Table.AddColumn(
@@ -154,7 +392,7 @@ let
             business_week = "BW" & Text.PadStart( Text.From(business_week_num), 2, "0") & " " & business_year,
             business_week_logic = v_business_week_logic,
             business_week_logic_updated = if business_week_logic then Table.ReplaceValue(business_year_first_day, each business_week_num, each if v_by_start_month =1 then [week_num] else business_week_num, Replacer.ReplaceValue, {"business_week_num"}) else business_year_first_day,
-            business_year_week_num = if v_business_week_logic then [week_year_id] else business_year_num * 100 + business_week_num
+            business_year_week_num = if v_business_week_logic then [week_year_num] else business_year_num * 100 + business_week_num
             ], 
             type [
             business_year_num = number, 
@@ -183,7 +421,8 @@ let
             business_week_num = number,
             business_week = text,
             business_week_logic = logical,
-            business_week_logic_updated = date
+            business_week_logic_updated = date,
+            business_year_week_num = number
             ]
         ), 
         v_exp_rec_business_fields = Table.ExpandRecordColumn(
@@ -260,7 +499,7 @@ let
             fiscal_week = "FW" & Text.PadStart( Text.From(fiscal_week_num), 2, "0") & " " & fiscal_year,
             fiscal_week_logic = v_fiscal_week_logic,
             fiscal_week_logic_updated = if fiscal_week_logic then Table.ReplaceValue(fiscal_year_first_day, each fiscal_week_num, each if v_fy_start_month =1 then [week_num] else fiscal_week_num, Replacer.ReplaceValue, {"fiscal_week_num"}) else fiscal_year_first_day,
-            fiscal_year_week_num = if v_fiscal_week_logic then [week_year_id] else (fiscal_year_num * 100) + fiscal_week_num
+            fiscal_year_week_num = if v_fiscal_week_logic then [week_year_num] else (fiscal_year_num * 100) + fiscal_week_num
             ], 
             type [
             fiscal_year_num = number, 
@@ -329,7 +568,8 @@ let
         ),
         v_fiscal_year_start = #date( Date.Year(p_start_date)-1, v_fy_start_month, 1 ),
         v_business_year_start = #date( Date.Year(p_start_date)-1, v_by_start_month, 1 ),
-        v_data_pre_record_join = v_exp_rec_fiscal_fields,
+        // === prepare table to begin current day records ===
+    v_data_pre_record_join = v_exp_rec_fiscal_fields,
 
         /*  === Get Current Date Values === */
         v_current_date_record = Table.SelectRows(v_data_pre_record_join, each ([date_id] = v_current_date)),
@@ -383,8 +623,127 @@ let
 
             ]
         ),
-    v_exp_calendar_records = Table.ExpandRecordColumn(v_calendar_records, "calendar_records", {"iso_calendar_year_offset", "iso_quarter_offset", "is_current_fq", "is_current_fp", "is_current_fw", "is_pfytd", "is_current_bq", "is_current_bp", "is_current_bw", "is_pbytd"}),
+    v_exp_calendar_records = Table.ExpandRecordColumn(
+  v_calendar_records, 
+  "calendar_records", 
+  {
+    "iso_calendar_year_offset", 
+    "iso_quarter_offset", 
+    "is_current_fq", 
+    "is_current_fp", 
+    "is_current_fw", 
+    "is_pfytd", 
+    "is_current_bq", 
+    "is_current_bp", 
+    "is_current_bw", 
+    "is_pbytd"
+  }
+),
     v_col_net_workdays = if p_add_relative_net_work_days = true then Table.AddColumn(v_exp_calendar_records, "relative_net_workdays", each fxNETWORKDAYS( p_start_date, [date_id], p_holidays ), Int64.Type) else v_exp_calendar_records,
+    v_misc_date_fields = Table.AddColumn(
+    v_col_net_workdays,
+    "misc_date_records",
+    each
+        [
+          date_id_py_lfl        = Date.AddDays([date_id], - 364),
+          date_id_py_minus1_lfl = Date.AddDays([date_id], - (364 * 2)),
+          date_id_2weeks        = 
+             if Number.Mod(Date.WeekOfYear([date_id]), 2) = 1 
+             then Date.EndOfWeek([date_id], Day.Monday) 
+             else Date.EndOfWeek(Date.AddDays([date_id], - 7), Day.Monday),
+         date_id_3weeks = Date.EndOfMonth(Date.AddMonths([date_id], - (Number.Mod(Date.Month([date_id]) - 1, 3)))),
+         date_id_2months = Date.EndOfMonth(Date.AddMonths([date_id], - (Number.Mod(Date.Month([date_id]) - 1, 2)))),
+         date_id_6months = Date.EndOfMonth(Date.AddMonths([date_id], - (Number.Mod(Date.Month([date_id]) - 1, 6))))
+
+        ]
+    , type [
+             date_id_py_lfl        = Date.Type, 
+             date_id_py_minus1_lfl = Date.Type, 
+             date_id_2weeks        = Date.Type, 
+             date_id_3weeks        = Date.Type, 
+             date_id_2months       = Date.Type, 
+             date_id_6months       = Date.Type 
+          ]
+  ),
+    v_exp_misc_date_fields = Table.ExpandRecordColumn(v_misc_date_fields, "misc_date_records", {"date_id_py_lfl", "date_id_py_minus1_lfl", "date_id_2weeks", "date_id_2months", "date_id_3weeks", "date_id_6months"}),
+    v_fiscal_quarter_months = Table.RenameColumns(
+  Table.Group(
+    Table.Distinct(
+      Table.SelectColumns(
+        v_exp_misc_date_fields, 
+        {
+          "month_start", 
+          "month_end", 
+          "fiscal_year_month_num", 
+          "fiscal_year_quarter_num"
+        }
+      ), 
+      {"fiscal_year_month_num"}
+    ), 
+    {"fiscal_year_quarter_num"}, 
+    {
+      {
+        "fiscal_quarter_month_start", 
+        each List.Min([month_start]), 
+        type date
+      }, 
+      {
+        "fiscal_quarter_month_end", 
+        each List.Max([month_end]), 
+        type date
+      }
+    }
+  ), 
+  {{"fiscal_year_quarter_num", "fiscal_quarter_key"}}
+),
+    v_business_quarter_months = Table.RenameColumns(
+  Table.Group(
+    Table.Distinct(
+      Table.SelectColumns(
+        v_exp_misc_date_fields, 
+        {
+          "month_start", 
+          "month_end", 
+          "business_year_month_num", 
+          "business_year_quarter_num"
+        }
+      ), 
+      {"business_year_month_num"}
+    ), 
+    {"business_year_quarter_num"}, 
+    {
+      {
+        "business_quarter_month_start", 
+        each List.Min([month_start]), 
+        type date
+      }, 
+      {
+        "business_quarter_month_end", 
+        each List.Max([month_end]), 
+        type date
+      }
+    }
+  ), 
+  {{"business_year_quarter_num", "business_quarter_key"}}
+),
+    v_join_fiscal_quarter_start_ends = Table.RemoveColumns(
+  Table.Join(
+    v_exp_misc_date_fields, {"fiscal_year_quarter_num"}, 
+    v_fiscal_quarter_months,{"fiscal_quarter_key"}, 
+    JoinKind.LeftOuter, 
+    JoinAlgorithm.SortMerge
+  ), 
+  {"fiscal_quarter_key"}
+),
+    v_join_business_quarter_start_ends = Table.RemoveColumns(
+  Table.Join(
+    v_join_fiscal_quarter_start_ends, {"business_year_quarter_num"}, 
+    v_business_quarter_months, {"business_quarter_key"}, 
+    JoinKind.LeftOuter, 
+    JoinAlgorithm.SortMerge
+  ), 
+  {"business_quarter_key"}
+),
         fxNETWORKDAYS = (p_start_date, p_end_date, optional holidays as list) =>
         let
             ListOfDates = List.Dates( p_start_date, Number.From(p_end_date-p_start_date)+1, Duration.From(1) ),
@@ -393,7 +752,7 @@ let
             CountDays = List.Count( DeleteWeekends)
         in
             CountDays,
-        v_remove_today = Table.RemoveColumns(if not List.Contains(v_Source, v_current_date) then Table.SelectRows(v_col_net_workdays, each ([date_id] <> v_current_date)) else v_col_net_workdays, {"day_year", "fiscal_year_first_day", "business_year_first_day"}),
+        v_remove_today = Table.RemoveColumns(if not List.Contains(v_Source, v_current_date) then Table.SelectRows(v_join_business_quarter_start_ends, each ([date_id] <> v_current_date)) else v_join_business_quarter_start_ends, {"day_year", "fiscal_year_first_day", "business_year_first_day"}),
     v_reorder_cols = Table.ReorderColumns(
   v_remove_today, 
   {
@@ -410,13 +769,14 @@ let
     "quarter_start", 
     "quarter_end", 
     "quarter_year", 
-    "quarter_year_id", 
+    "quarter_year_num", 
     "quarter_offset", 
     "is_quarter_complete", 
     "month_num", 
     "month_start", 
     "month_end", 
     "month_year", 
+    "month_year_serial_number",
     "month_year_id", 
     "month_offset", 
     "is_month_complete", 
@@ -429,7 +789,7 @@ let
     "week_start", 
     "week_end", 
     "week_year", 
-    "week_year_id", 
+    "week_year_num", 
     "week_offset", 
     "is_week_complete", 
     "week_day_num", 
@@ -442,13 +802,21 @@ let
     "is_holiday", 
     "is_work_day", 
     "date_type", 
-    "iso_year", 
+    "iso_year",
+    "iso_week_num",
+    "iso_year_week_num", 
+    "iso_week_offset", 
+    "iso_week_start_date", 
+    "iso_week_end_date", 
     "iso_quarter_num", 
     "iso_quarter", 
     "iso_quarter_year", 
-    "iso_quarter_year_id",
-    "iso_calendar_year_offset", 
-    "iso_quarter_offset",  
+    "iso_year_quarter_num", 
+    "iso_quarter_start_date", 
+    "iso_quarter_end_date", 
+    "is_current_iso_week", 
+    "is_current_iso_month", 
+    "is_current_iso_quarter",
     "business_year_num", 
     "business_year_offset", 
     "business_year", 
@@ -462,6 +830,8 @@ let
     "is_pbytd", 
     "business_quarter_num", 
     "business_quarter", 
+    "business_quarter_month_start",
+    "business_quarter_month_end",
     "business_year_quarter", 
     "business_year_quarter_num", 
     "business_period_num", 
@@ -488,7 +858,9 @@ let
     "is_current_fw", 
     "is_pfytd",  
     "fiscal_quarter_num", 
-    "fiscal_quarter", 
+    "fiscal_quarter",
+    "fiscal_quarter_month_start",
+    "fiscal_quarter_month_end", 
     "fiscal_year_quarter", 
     "fiscal_year_quarter_num", 
     "fiscal_period_num", 
@@ -502,9 +874,16 @@ let
     "fiscal_week", 
     "fiscal_week_logic", 
     "fiscal_week_logic_updated", 
-    "fiscal_year_week_num"
+    "fiscal_year_week_num",
+    "date_id_py_lfl",
+    "date_id_py_minus1_lfl",
+    "date_id_2weeks", 
+    "date_id_3weeks", 
+    "date_id_2months", 
+    "date_id_6months"
   }
 ),
+    // === list column groups (calendar / business / fiscal ) ===
     list_calendar_cols = {
     "date_id", 
     "date_serial_number",
@@ -514,18 +893,20 @@ let
     "is_cmtd", 
     "is_ytd", 
     "is_frc", 
+    "is_py",
     "quarter_num", 
     "quarter", 
     "quarter_start", 
     "quarter_end", 
     "quarter_year", 
-    "quarter_year_id", 
+    "quarter_year_num", 
     "quarter_offset", 
     "is_quarter_complete", 
     "month_num", 
     "month_start", 
     "month_end", 
     "month_year", 
+    "month_year_serial_number",
     "month_year_id", 
     "month_offset", 
     "is_month_complete", 
@@ -537,8 +918,12 @@ let
     "week_num", 
     "week_start", 
     "week_end", 
+    "date_id_2weeks", 
+    "date_id_3weeks", 
+    "date_id_2months", 
+    "date_id_6months",
     "week_year", 
-    "week_year_id", 
+    "week_year_num", 
     "week_offset", 
     "is_week_complete", 
     "week_day_num", 
@@ -552,12 +937,24 @@ let
     "is_work_day", 
     "date_type", 
     "iso_year", 
+    "iso_calendar_year_offset", 
+    "iso_week_num",
+    "iso_year_week_num",
+    "iso_week_offset", 
+    "iso_week_start_date", 
+    "iso_week_end_date", 
     "iso_quarter_num", 
     "iso_quarter", 
     "iso_quarter_year", 
-    "iso_quarter_year_id",
-    "iso_calendar_year_offset", 
-    "iso_quarter_offset"
+    "iso_year_quarter_num", 
+    "iso_quarter_start_date", 
+    "iso_quarter_end_date", 
+    "is_current_iso_week", 
+    "is_current_iso_month", 
+    "is_current_iso_quarter",
+    "date_id_py_lfl",
+    "date_id_py_minus1_lfl"
+    
     },
 
     list_business_cols = {
@@ -574,6 +971,8 @@ let
        // "is_pbytd", 
         "business_quarter_num", 
         "business_quarter", 
+        "business_quarter_month_start",
+        "business_quarter_month_end",
         "business_year_quarter", 
         "business_year_quarter_num", 
         "business_period_num", 
@@ -604,6 +1003,8 @@ let
        // "is_pfytd",  
         "fiscal_quarter_num", 
         "fiscal_quarter", 
+        "fiscal_quarter_month_start",
+        "fiscal_quarter_month_end",
         "fiscal_year_quarter", 
         "fiscal_year_quarter_num", 
         "fiscal_period_num", 
@@ -621,6 +1022,7 @@ let
     },
     check_fiscal_cols = if p_fiscal_year_start_month_num <> null then true else false,
     check_business_cols = if p_business_year_start_month_num <> null then true else false,
+    // === conditionally output columns based on business/fiscal month paramaters ===
     v_columns_output = List.Union(
     List.Select(
         { list_calendar_cols, 
